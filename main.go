@@ -6,9 +6,13 @@ import (
 	"Online_shop_api/middleware"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+
+	godotenv.Load()
+	
 	db.ConnectMySQL()
 
 	r := gin.Default()
@@ -17,23 +21,37 @@ func main() {
 		c.JSON(200, gin.H{"message": "pong"})
 	})
 
-	// =====================
-	// AUTH (PUBLIC)
-	// =====================
+
 	r.POST("/register", handlers.Register)
 	r.POST("/login", handlers.Login)
 
-	//Fitur Admin
+	
+	user := r.Group("/user")
+	user.Use(middleware.JWTAuth())
+	{
+		user.POST("/cart", handlers.AddToCart)
+		user.GET("/cart", handlers.GetCart)
+		user.PUT("/cart/:product_id", handlers.UpdateCartItem)
+		user.DELETE("/cart/:product_id", handlers.DeleteCartItem)
+		user.DELETE("/cart", handlers.ClearCart)
+
+		user.POST("/checkout", handlers.Checkout)
+
+
+
+	}
+
+	
 	admin := r.Group("/admin")
 	admin.Use(middleware.JWTAuth(), middleware.AdminOnly())
 	{
-		// categories
+
 		admin.POST("/categories", handlers.CreateCategory)
 		admin.GET("/categories", handlers.GetCategories)
 		admin.PUT("/categories/:id", handlers.UpdateCategories)
 		admin.DELETE("/categories/:id", handlers.DeleteCategories)
 
-		// products
+	
 		admin.POST("/products", handlers.CreateProduct)
 		admin.GET("/products", handlers.GetProducts)
 		admin.PUT("/products/:id", handlers.UpdateProducts)
