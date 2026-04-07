@@ -38,13 +38,14 @@ func main() {
 	{
 		// Pastikan di bawah rute yang butuh login (JWTAuth)
 		r.POST("/api/checkout", handlers.Checkout)
+		r.POST("/webhook/xendit", handlers.XenditWebhook)
 
 		user.POST("/cart", handlers.AddToCart)
 		user.GET("/cart", handlers.GetCart)
 		user.PUT("/cart/:product_id", handlers.UpdateCartItem)
 		user.DELETE("/cart/:product_id", handlers.DeleteCartItem)
 		user.DELETE("/cart", handlers.ClearCart)
-
+		user.POST("/pay/:order_id", handlers.CreateInvoice)
 		user.POST("/checkout", handlers.Checkout)
 	}
 
@@ -58,7 +59,7 @@ func main() {
 
 		// Pastikan di bawah middleware admin
 		admin.GET("/summary", handlers.GetSummary)
-    admin.GET("/order-stats", handlers.GetOrderStats)
+		admin.GET("/order-stats", handlers.GetOrderStats)
 		admin.GET("/orders", handlers.GetOrders)
 		admin.POST("/products", handlers.CreateProduct)
 		admin.GET("/products", handlers.GetProducts)
