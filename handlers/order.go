@@ -1,18 +1,43 @@
 package handlers
 
 import (
-	"net/http"
-
 	"Online_shop_api/db"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
+// ==========================================
+// 1. DASHBOARD SUMMARY (UNTUK ADMIN)
+// ==========================================
+func GetSummary(c *gin.Context) {
+	var totalProducts int
+	var totalOrders int
+	var totalRevenue float64
+
+	// total produk
+	db.DB.QueryRow("SELECT COUNT(*) FROM products").Scan(&totalProducts)
+
+	// total orders
+	db.DB.QueryRow("SELECT COUNT(*) FROM orders").Scan(&totalOrders)
+
+	// total revenue
+	db.DB.QueryRow("SELECT IFNULL(SUM(total_price),0) FROM orders WHERE status='paid'").Scan(&totalRevenue)
+
+	c.JSON(200, gin.H{
+		"total_products": totalProducts,
+		"total_orders":   totalOrders,
+		"total_revenue":  totalRevenue,
+	})
+}
+
+// ==========================================
+// 2. CHECKOUT (UNTUK CUSTOMER)
+// ==========================================
 func Checkout(c *gin.Context) {
 	userID := int(c.MustGet("user_id").(float64))
 
-	// ambil cart user
-	// UBAH DISINI: cart_items -> carts, ci.quantity -> ci.qty
+	// Ambil data keranjang user (Join dengan products untuk dapat harga terbaru)
 	rows, err := db.DB.Query(`
 		SELECT ci.product_id, ci.qty, p.price
 		FROM carts ci
@@ -47,13 +72,13 @@ func Checkout(c *gin.Context) {
 		items = append(items, item)
 	}
 
-	// TAMBAHAN: Cek apakah keranjang kosong
+	// Cek apakah keranjang kosong
 	if len(items) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "cart is empty"})
 		return
 	}
 
-	// insert order
+	// 1. Insert ke tabel orders
 	result, err := db.DB.Exec(
 		"INSERT INTO orders (user_id, total_price) VALUES (?, ?)",
 		userID, total,
@@ -66,10 +91,8 @@ func Checkout(c *gin.Context) {
 
 	orderID, _ := result.LastInsertId()
 
-	// insert order items
+	// 2. Insert detail ke tabel order_items
 	for _, item := range items {
-		// Catatan: Pastikan di tabel 'order_items' nama kolomnya memang 'quantity' ya, bukan 'qty' juga.
-		// Kalau di database namanya 'qty', silakan ubah kata 'quantity' di bawah ini menjadi 'qty'
 		_, err := db.DB.Exec(
 			"INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
 			orderID, item.ProductID, item.Qty, item.Price,
@@ -81,9 +104,7 @@ func Checkout(c *gin.Context) {
 		}
 	}
 
-	
-	// clear cart
-	// UBAH DISINI: cart_items -> carts
+	// 3. Kosongkan keranjang setelah berhasil checkout
 	db.DB.Exec("DELETE FROM carts WHERE user_id = ?", userID)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -91,4 +112,75 @@ func Checkout(c *gin.Context) {
 		"order_id": orderID,
 		"total":    total,
 	})
+}
+
+// ==========================================
+// 3. ORDER STATS (UNTUK ADMIN)
+// ==========================================
+func GetOrderStats(c *gin.Context) {
+	rows, err := db.DB.Query(`
+		SELECT status, COUNT(*) as total
+		FROM orders
+		GROUP BY status
+	`)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	var result []gin.H
+
+	for rows.Next() {
+		var status string
+		var total int
+
+		rows.Scan(&status, &total)
+
+		result = append(result, gin.H{
+			"status": status,
+			"total":  total,
+		})
+	}
+
+	c.JSON(200, result)
+}
+
+// ==========================================
+// 4. GET ALL ORDERS (UNTUK ADMIN)
+// ==========================================
+func GetOrders(c *gin.Context) {
+	rows, err := db.DB.Query(`
+		SELECT o.id, u.name, o.total_price, o.status, o.created_at
+		FROM orders o
+		LEFT JOIN users u ON o.user_id = u.id
+		ORDER BY o.id DESC
+	`)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	var orders []gin.H
+
+	for rows.Next() {
+		var id int
+		var name string
+		var total float64
+		var status string
+		var created string
+
+		rows.Scan(&id, &name, &total, &status, &created)
+
+		orders = append(orders, gin.H{
+			"id":         id,
+			"name":       name,
+			"total":      total,
+			"status":     status,
+			"created_at": created,
+		})
+	}
+
+	c.JSON(200, orders)
 }

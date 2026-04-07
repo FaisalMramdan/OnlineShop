@@ -4,29 +4,42 @@ import (
 	"Online_shop_api/db"
 	"Online_shop_api/models"
 	"net/http"
+	"strconv"
+	"time"
+
+	"database/sql"
 
 	"github.com/gin-gonic/gin"
 )
 
-// CREATE PRODUCT
 func CreateProduct(c *gin.Context) {
-	var input models.ProductInput
+	// 1. Ambil input teks dan angka
+	name := c.PostForm("name")
+	categoryID, _ := strconv.Atoi(c.PostForm("category_id"))
+	price, _ := strconv.ParseFloat(c.PostForm("price"), 64)
+	stock, _ := strconv.Atoi(c.PostForm("stock"))
+	description := c.PostForm("description")
 
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	// 2. Handle File Gambar (Wajib sesuai soal Ujikom)
+	file, err := c.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Gambar harus diupload"})
 		return
 	}
 
-	_, err := db.DB.Exec(
-		`INSERT INTO products
-		(category_id, name, price, stock, description, image)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		input.CategoryID,
-		input.Name,
-		input.Price,
-		input.Stock,
-		input.Description,
-		input.Image,
+	// Nama file unik agar tidak bentrok
+	filename := time.Now().Format("20060102150405") + "_" + file.Filename
+	// Simpan ke folder 'uploads'
+	if err := c.SaveUploadedFile(file, "uploads/"+filename); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal simpan gambar"})
+		return
+	}
+
+	// 3. Simpan ke Database
+	_, err = db.DB.Exec(
+		`INSERT INTO products (category_id, name, price, stock, description, image) 
+         VALUES (?, ?, ?, ?, ?, ?)`,
+		categoryID, name, price, stock, description, filename,
 	)
 
 	if err != nil {
@@ -34,9 +47,7 @@ func CreateProduct(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Product berhasil ditambahkan",
-	})
+	c.JSON(http.StatusOK, gin.H{"message": "Product berhasil ditambahkan"})
 }
 
 // GET ALL PRODUCTS
@@ -55,9 +66,9 @@ func GetProducts(c *gin.Context) {
 	var products []gin.H
 	for rows.Next() {
 		var id, stock int
-		var name, category string
+		var name string
+		var category sql.NullString
 		var price float64
-
 		if err := rows.Scan(&id, &name, &price, &stock, &category); err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
@@ -68,7 +79,7 @@ func GetProducts(c *gin.Context) {
 			"name":     name,
 			"price":    price,
 			"stock":    stock,
-			"category": category,
+			"category": category.String,
 		})
 	}
 	c.JSON(200, products)
