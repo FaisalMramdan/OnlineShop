@@ -29,7 +29,10 @@ func main() {
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "pong"})
 	})
-
+	// PUBLIC (TIDAK PERLU LOGIN)
+	
+	r.GET("/products", handlers.GetProducts)
+	r.GET("/categories", handlers.GetCategories)
 	r.POST("/register", handlers.Register)
 	r.POST("/login", handlers.Login)
 
@@ -61,6 +64,7 @@ func main() {
 		admin.GET("/summary", handlers.GetSummary)
 		admin.GET("/order-stats", handlers.GetOrderStats)
 		admin.GET("/orders", handlers.GetOrders)
+		admin.PUT("/orders/:id", handlers.UpdateOrderStatus)
 		admin.POST("/products", handlers.CreateProduct)
 		admin.GET("/products", handlers.GetProducts)
 		admin.PUT("/products/:id", handlers.UpdateProducts)

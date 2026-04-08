@@ -184,3 +184,31 @@ func GetOrders(c *gin.Context) {
 
 	c.JSON(200, orders)
 }
+
+// ================= UPDATE STATUS ORDER =================
+func UpdateOrderStatus(c *gin.Context) {
+	id := c.Param("id")
+
+	var input struct {
+		Status string `json:"status"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	_, err := db.DB.Exec(
+		"UPDATE orders SET status=? WHERE id=?",
+		input.Status, id,
+	)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message": "Status berhasil diupdate",
+	})
+}
