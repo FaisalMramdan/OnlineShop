@@ -75,7 +75,7 @@ func GetCart(c *gin.Context) {
 
 	// UBAH DISINI: cart_item -> carts, ci.quantity -> ci.qty
 	rows, err := db.DB.Query(`
-		SELECT ci.product_id, p.name, p.price, ci.qty
+		SELECT ci.product_id, p.name, p.price, ci.qty, IFNULL(p.image, '')
 		FROM carts ci
 		JOIN products p ON ci.product_id = p.id
 		WHERE ci.user_id = ?
@@ -92,11 +92,12 @@ func GetCart(c *gin.Context) {
 
 	for rows.Next() {
 		var productID int
-		var name string
+		var name string 
 		var price float64
 		var qty int
+		var image string
 
-		rows.Scan(&productID, &name, &price, &qty)
+		rows.Scan(&productID, &name, &price, &qty, &image)
 
 		subtotal := price * float64(qty)
 		total += subtotal
@@ -106,6 +107,7 @@ func GetCart(c *gin.Context) {
 			"name":       name,
 			"price":      price,
 			"quantity":   qty,
+			"image":      image,
 			"subtotal":   subtotal,
 		})
 	}

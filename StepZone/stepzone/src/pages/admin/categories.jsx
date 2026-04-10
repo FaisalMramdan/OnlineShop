@@ -16,7 +16,7 @@ export default function Categories() {
     try {
       // Nembak ke endpoint GET /api/categories (Sesuaikan dengan route di Golang-mu)
        const response = await axiosInstance.get('/admin/categories')
-      setCategories(response.data); // Masukkan data dari database ke state
+      setCategories(response.data || []); // Masukkan data dari database ke state
       setIsLoading(false);
     } catch (error) {
       console.error("Gagal mengambil data kategori:", error);

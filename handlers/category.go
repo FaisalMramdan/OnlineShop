@@ -90,25 +90,58 @@ func UpdateCategories(c *gin.Context) {
 func DeleteCategories(c *gin.Context) {
 	id := c.Param("id")
 
-	result, err := db.DB.Exec(
-		"DELETE FROM categories WHERE id=?",
-		id,
-	)
-
+	// Mulai transaksi
+	tx, err := db.DB.Begin()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal memulai transaksi"})
 		return
 	}
 
-	rows, err := result.RowsAffected()
+	// 1. Hapus cart items yang punya produk dari kategori ini
+	_, err = tx.Exec(`
+		DELETE FROM carts WHERE product_id IN (
+			SELECT id FROM products WHERE category_id = ?
+		)`, id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hapus keranjang terkait: " + err.Error()})
 		return
 	}
+
+	// 2. Hapus order_items yang punya produk dari kategori ini
+	_, err = tx.Exec(`
+		DELETE FROM order_items WHERE product_id IN (
+			SELECT id FROM products WHERE category_id = ?
+		)`, id)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hapus order items terkait: " + err.Error()})
+		return
+	}
+
+	// 3. Hapus produk-produk dalam kategori ini
+	_, err = tx.Exec("DELETE FROM products WHERE category_id = ?", id)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hapus produk terkait: " + err.Error()})
+		return
+	}
+
+	// 4. Hapus kategorinya
+	result, err := tx.Exec("DELETE FROM categories WHERE id = ?", id)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hapus kategori: " + err.Error()})
+		return
+	}
+
+	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"message": "Category not found"})
+		tx.Rollback()
+		c.JSON(http.StatusNotFound, gin.H{"message": "Kategori tidak ditemukan"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Category deleted"})
+	tx.Commit()
+	c.JSON(http.StatusOK, gin.H{"message": "Kategori berhasil dihapus"})
 }

@@ -59,12 +59,14 @@ func CreateInvoice(c *gin.Context) {
 
 	email := "test@gmail.com"
 	desc := "Pembayaran Order #" + orderID
+	successURL := "http://localhost:5173/"
 
 	req := invoice.CreateInvoiceRequest{
-		ExternalId:  "order-" + orderID,
-		Amount:      total,
-		PayerEmail:  &email,
-		Description: &desc,
+		ExternalId:         "order-" + orderID,
+		Amount:             total,
+		PayerEmail:         &email,
+		Description:        &desc,
+		SuccessRedirectUrl: &successURL,
 	}
 
 	resp, _, err := client.InvoiceApi.CreateInvoice(ctx).

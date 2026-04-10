@@ -53,7 +53,7 @@ func CreateProduct(c *gin.Context) {
 // GET ALL PRODUCTS
 func GetProducts(c *gin.Context) {
 	rows, err := db.DB.Query(`
-		SELECT p.id, p.name, p.price, p.stock, c.name
+		SELECT p.id, p.name, p.price, p.stock, c.name, p.image
 		FROM products p
 		LEFT JOIN categories c ON p.category_id = c.id
 	`)
@@ -66,10 +66,10 @@ func GetProducts(c *gin.Context) {
 	var products []gin.H
 	for rows.Next() {
 		var id, stock int
-		var name string
+		var name, image string
 		var category sql.NullString
 		var price float64
-		if err := rows.Scan(&id, &name, &price, &stock, &category); err != nil {
+		if err := rows.Scan(&id, &name, &price, &stock, &category, &image); err != nil {
 			c.JSON(500, gin.H{"error": err.Error()})
 			return
 		}
@@ -80,6 +80,7 @@ func GetProducts(c *gin.Context) {
 			"price":    price,
 			"stock":    stock,
 			"category": category.String,
+			"image":    image,
 		})
 	}
 	c.JSON(200, products)
@@ -124,25 +125,44 @@ func UpdateProducts(c *gin.Context) {
 func DeleteProducts(c *gin.Context) {
 	id := c.Param("id")
 
-	result, err := db.DB.Exec(
-		"DELETE FROM products WHERE id=?",
-		id,
-	)
-
+	// Mulai transaksi
+	tx, err := db.DB.Begin()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal memulai transaksi"})
 		return
 	}
 
-	rows, err := result.RowsAffected()
+	// 1. Hapus dari carts yang punya produk ini
+	_, err = tx.Exec("DELETE FROM carts WHERE product_id = ?", id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hapus dari keranjang: " + err.Error()})
 		return
 	}
+
+	// 2. Hapus dari order_items yang punya produk ini
+	_, err = tx.Exec("DELETE FROM order_items WHERE product_id = ?", id)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hapus dari order items: " + err.Error()})
+		return
+	}
+
+	// 3. Hapus produknya
+	result, err := tx.Exec("DELETE FROM products WHERE id = ?", id)
+	if err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Gagal hapus produk: " + err.Error()})
+		return
+	}
+
+	rows, _ := result.RowsAffected()
 	if rows == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"message": "Product not found"})
+		tx.Rollback()
+		c.JSON(http.StatusNotFound, gin.H{"message": "Produk tidak ditemukan"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "Product deleted"})
+	tx.Commit()
+	c.JSON(http.StatusOK, gin.H{"message": "Produk berhasil dihapus"})
 }

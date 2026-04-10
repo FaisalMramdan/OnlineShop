@@ -21,8 +21,8 @@ func GetSummary(c *gin.Context) {
 	// total orders
 	db.DB.QueryRow("SELECT COUNT(*) FROM orders").Scan(&totalOrders)
 
-	// total revenue
-	db.DB.QueryRow("SELECT IFNULL(SUM(total_price),0) FROM orders WHERE status='paid'").Scan(&totalRevenue)
+	// total revenue (hitung semua yang tidak pending)
+	db.DB.QueryRow("SELECT IFNULL(SUM(total_price),0) FROM orders WHERE status IN ('paid', 'process', 'shipped', 'done', 'delivered')").Scan(&totalRevenue)
 
 	c.JSON(200, gin.H{
 		"total_products": totalProducts,
@@ -211,4 +211,140 @@ func UpdateOrderStatus(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "Status berhasil diupdate",
 	})
+}
+
+// ================= GET ORDER DETAIL =================
+func GetOrderDetail(c *gin.Context) {
+	id := c.Param("id")
+
+	// Ambil info order
+	var orderID int
+	var userName string
+	var total float64
+	var status string
+	var createdAt string
+
+	err := db.DB.QueryRow(`
+		SELECT o.id, u.name, o.total_price, o.status, o.created_at
+		FROM orders o
+		LEFT JOIN users u ON o.user_id = u.id
+		WHERE o.id = ?
+	`, id).Scan(&orderID, &userName, &total, &status, &createdAt)
+
+	if err != nil {
+		c.JSON(404, gin.H{"error": "order not found"})
+		return
+	}
+
+	// Ambil item order
+	rows, err := db.DB.Query(`
+		SELECT p.name, oi.quantity, oi.price
+		FROM order_items oi
+		JOIN products p ON oi.product_id = p.id
+		WHERE oi.order_id = ?
+	`, id)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": "failed get order items"})
+		return
+	}
+	defer rows.Close()
+
+	var items []gin.H
+	for rows.Next() {
+		var name string
+		var qty int
+		var price float64
+		rows.Scan(&name, &qty, &price)
+		items = append(items, gin.H{
+			"name":     name,
+			"quantity": qty,
+			"price":    price,
+		})
+	}
+
+	c.JSON(200, gin.H{
+		"id":         orderID,
+		"name":       userName,
+		"total":      total,
+		"status":     status,
+		"created_at": createdAt,
+		"items":      items,
+	})
+}
+
+// ==========================================
+// 5. GET MY ORDERS (UNTUK USER YANG LOGIN)
+// ==========================================
+func GetMyOrders(c *gin.Context) {
+	userID := int(c.MustGet("user_id").(float64))
+
+	rows, err := db.DB.Query(`
+		SELECT o.id, o.total_price, o.status, o.created_at
+		FROM orders o
+		WHERE o.user_id = ?
+		ORDER BY o.id DESC
+	`, userID)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+	defer rows.Close()
+
+	var orders []gin.H
+
+	for rows.Next() {
+		var id int
+		var total float64
+		var status string
+		var created string
+
+		rows.Scan(&id, &total, &status, &created)
+
+		// Ambil items untuk setiap order
+		itemRows, err := db.DB.Query(`
+			SELECT p.name, IFNULL(p.image,''), oi.quantity, oi.price
+			FROM order_items oi
+			JOIN products p ON oi.product_id = p.id
+			WHERE oi.order_id = ?
+		`, id)
+
+		var items []gin.H
+		if err == nil {
+			for itemRows.Next() {
+				var name string
+				var image string
+				var qty int
+				var price float64
+				itemRows.Scan(&name, &image, &qty, &price)
+				items = append(items, gin.H{
+					"name":     name,
+					"image":    image,
+					"quantity": qty,
+					"price":    price,
+					"subtotal": price * float64(qty),
+				})
+			}
+			itemRows.Close()
+		}
+
+		if items == nil {
+			items = []gin.H{}
+		}
+
+		orders = append(orders, gin.H{
+			"id":         id,
+			"total":      total,
+			"status":     status,
+			"created_at": created,
+			"items":      items,
+		})
+	}
+
+	if orders == nil {
+		orders = []gin.H{}
+	}
+
+	c.JSON(200, orders)
 }

@@ -30,7 +30,7 @@ func main() {
 		c.JSON(200, gin.H{"message": "pong"})
 	})
 	// PUBLIC (TIDAK PERLU LOGIN)
-	
+
 	r.GET("/products", handlers.GetProducts)
 	r.GET("/categories", handlers.GetCategories)
 	r.POST("/register", handlers.Register)
@@ -50,6 +50,7 @@ func main() {
 		user.DELETE("/cart", handlers.ClearCart)
 		user.POST("/pay/:order_id", handlers.CreateInvoice)
 		user.POST("/checkout", handlers.Checkout)
+		user.GET("/orders", handlers.GetMyOrders)
 	}
 
 	admin := r.Group("/admin")
@@ -64,12 +65,16 @@ func main() {
 		admin.GET("/summary", handlers.GetSummary)
 		admin.GET("/order-stats", handlers.GetOrderStats)
 		admin.GET("/orders", handlers.GetOrders)
+		admin.GET("/orders/:id", handlers.GetOrderDetail)
 		admin.PUT("/orders/:id", handlers.UpdateOrderStatus)
 		admin.POST("/products", handlers.CreateProduct)
 		admin.GET("/products", handlers.GetProducts)
 		admin.PUT("/products/:id", handlers.UpdateProducts)
 		admin.DELETE("/products/:id", handlers.DeleteProducts)
 	}
+
+	// 🔥 EXPOSE FOLDER UPLOADS UNTUK STATIC FILES
+	r.Static("/uploads", "./uploads")
 
 	r.Run(":8080")
 }
